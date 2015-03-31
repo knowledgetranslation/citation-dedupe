@@ -1,0 +1,5 @@
+[client]
+user = endnote
+password = 1qaz#EDC
+database = endnote
+default-character-set = utf8
