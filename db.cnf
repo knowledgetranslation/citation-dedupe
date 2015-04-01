@@ -1,5 +1,5 @@
 [client]
-user = endnote
-password = 1qaz#EDC
-database = endnote
+user = database_user_name
+password = pass
+database = database_name
 default-character-set = utf8
