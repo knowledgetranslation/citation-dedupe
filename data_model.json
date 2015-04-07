@@ -78,7 +78,7 @@
         "step_size" : 3000}
     ,
     "training": 
-        {"accuracy" : 0.5,
+        "accuracy" : 0.5,
         "uncovered" : 5,
         "samples" : 30}
 }
