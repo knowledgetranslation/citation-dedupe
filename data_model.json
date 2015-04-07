@@ -65,18 +65,20 @@
             "variable name": "isbn"
         }
     ],
-    "db_params": 
+    "source_db": 
         {"tab_id": "id",
         "tab_name": "refs_training",
         "tab_columns": "id, author, title, secondary_title, alternate_title, abstract, year, volume, pages, number, isbn, electronic_resource_number",
         "collate": "utf8_general_ci",
         "row_limit": 0}
     ,
-    "max_rank" : 11,
-    "accuracy" : 0.5,
-    "uncovered" : 5,
-    "cores" : 1,
-    "threads" : 1,
-    "samples" : 30,
-    "step_size" : 3000
+    "performance": 
+        {"cores" : 1,
+        "threads" : 1,
+        "step_size" : 3000}
+    ,
+    "training": 
+        {"accuracy" : 0.5,
+        "uncovered" : 5,
+        "samples" : 30}
 }
