@@ -8,144 +8,39 @@
  __Note:__ To create related tables in Database you need to run `/init_db.py` 
  before running this script. """
  
-from __future__ import print_function
+# from __future__ import print_function
 
-import os
-import sys
+import os, sys
 import itertools
-import time
 import logging
-import optparse
-import locale
-import pickle
-import multiprocessing
+# import locale
+# import pickle
+# import multiprocessing
 
 import mysql.connector
 import dedupe
 import json
 
+from addons import trainer
+
 # FILES VARS
-MYSQL_CONFIG = os.path.abspath('.') +'/'+ 'db.cnf'
-MODEL_FILE = os.path.abspath('.') +'/'+ 'data_model.json'
+PATH = os.path.abspath('.') +'/'
+MODEL_FILE = PATH + 'data_model.json'
 
-SETTINGS_FILE = os.path.abspath('.') +'/'+ 'dedupe_settings'
-TRAINING_FILE = os.path.abspath('.') +'/'+ 'dedupe_training.json'
-
-class trainer(object):
-    def __init__(self):
-        self.recordsCount = 0
-
-        self.connection = mysql.connector.connect(option_files = MYSQL_CONFIG)
-        self.cursor = self.connection.cursor(dictionary = True, buffered = False)
-        self.cursor.execute("SET net_write_timeout = 3600")
-
-        self.getDataModel(MODEL_FILE)
-
-    def startActiveLearning(self, deduper):
-        logging.info("starting active labelling,  use 'y', 'n' and 'u' keys to flag duplicates press 'f' when you are finished")
-        """ Starts the training loop. Dedupe will find the next pair of records
-         it is least certain about and ask you to label them as duplicates or not. """
-        dedupe.convenience.consoleLabel(deduper)
-
-    def startTraining(self):
-        logging.info('start training...')
-        # Create a new deduper object and pass our data model to it.
-        deduper = dedupe.Dedupe(self.fields, num_cores = self.cpu)
-
-        # We will sample pairs from the entire data table for training
-        logging.info("loading samples' data from table '%s'" % self.tableName)
-        self.cursor.execute("SELECT %s FROM %s" % (self.columns, self.tableName))
-
-        temp_d = dict((i, row) for i, row in enumerate(self.cursor))
-        deduper.sample(temp_d, self.samples_size)
-        del temp_d
-        logging.info('data dictionary was created successfully')
-
-        """ If we have training data saved from a previous run of dedupe, look for it and load it in.
-         __Note:__ if you want to train from scratch, delete the TRAINING_FILE """
-        if os.path.exists(TRAINING_FILE):
-            logging.info('reading labeled examples from ', TRAINING_FILE)
-            with open(TRAINING_FILE) as tf :
-                deduper.readTraining(tf)
-
-        self.startActiveLearning(deduper) # Start training loop
-
-        """ Notice our two arguments here
-         `ppc` limits the Proportion of Pairs Covered that we allow a
-         predicate to cover. If a predicate puts together a fraction of
-         possible pairs greater than the ppc, that predicate will be removed
-         from consideration. As the size of the data increases, the user
-         will generally want to reduce ppc (=0.01).
-
-         `uncovered_dupes`(=5) is the number of true dupes pairs in our training
-         data that we are willing to accept will never be put into any
-         block. If true duplicates are never in the same block, we will never
-         compare them, and may never declare them to be duplicates.
-
-         However, requiring that we cover every single true dupe pair may
-         mean that we have to use blocks that put together many, many
-         distinct pairs that we'll have to expensively, compare as well. """
-        logging.info('saving training data to %s' % TRAINING_FILE)
-        deduper.train(ppc = self.accuracy)
-        # deduper.train(ppc = self.accuracy, uncovered_dupes = self.uncovered)
-
-        # When finished, save our labelled, training pairs to disk
-        self.saveSettingFiles(deduper)
-
-        # We can now remove some of the memory hobbing objects we used for training
-        logging.info('cleaning unused data')
-        deduper.cleanupTraining()
-
-        logging.info('training was finished')
-        return deduper
-
-    def saveSettingFiles(self, deduper):
-        logging.info('saving training data to %s' % TRAINING_FILE)
-        with open(TRAINING_FILE, 'w') as tf:
-            deduper.writeTraining(tf)
-
-        logging.info('saving setting data to %s' % SETTINGS_FILE)
-        with open(SETTINGS_FILE, 'wb') as sf:
-            deduper.writeSettings(sf)
-
-    def getDataModel(self, data_model_file):
-        """ Define the fields which dedupe will pay attention to
-         The Pages, Volume, Number, ISBN and ISSN and fields are often missing,
-         tell dedupe that. """
-        if os.path.exists(data_model_file):
-            logging.info('reading data structure from %s' % data_model_file)
-            with open(data_model_file) as df :
-                data = json.load(df)
-                self.fields = data['fields']
-                self.step_size = data['step_size']
-
-                self.cpu = data['cores']
-                self.processes = data['threads']
-
-                self.samples_size = data['samples']
-                self.accuracy = data['accuracy']
-                self.uncovered = data['uncovered']
-
-                params = data['db_params']
-                self.tableCollate = params['collate']
-                self.tableName = params['tab_name']
-                self.tablePK = params['tab_id']
-                self.columns = params['tab_columns']
-        else: 
-            logging.info("WARNING! could not read data structure from %s" % data_model_file)
-            sys.exit(0)
-
-    def closeAllConnections(self):
-        self.connection.close()
-
-    def resetTraining(self):
-        self.recordsCount = 0
+MYSQL_CONFIG = PATH + 'db.cnf'
+SETTINGS_FILE = PATH + 'dedupe_settings'
+TRAINING_FILE = PATH + 'dedupe_training.json'
 
 class analyzer(object):
-    def __init__(self):
+    def __init__(self, modelFile = MODEL_FILE):
+        if not self.getParameters(modelFile):
+            logging.warning('WARNING! Please, choose other Data Model file against %s' % modelFile)
+            self.resetAnalyzer()
+            sys.exit(0)
+
         self.dupesCount = 0
         self.recordsCount = 0
-        self.isActiveLearning = False
+        self.modelFile = modelFile
 
         self.con = self.connectDB(MYSQL_CONFIG)
         self.con2 = self.connectDB(MYSQL_CONFIG)
@@ -156,31 +51,27 @@ class analyzer(object):
         self.dictCursor.execute("SET net_write_timeout = 3600")
         self.tupleCursor.execute("SET net_write_timeout = 3600")
         self.deduper = ()
+        
+    def startAnalyze(self, forceTraining = False):
+        # if self.isActiveLearning:
+        if forceTraining:
+            global trainer
 
-    def startAnalyze(self):
-        if self.isActiveLearning:
+            trainer = trainer.trainer(MODEL_FILE) #self.modelFile)
             self.deduper = trainer.startTraining()
-            self.processes = trainer.processes
-            self.step_size = trainer.step_size
-            
-            self.tableName = trainer.tableName
-            self.tablePK = trainer.tablePK
-            self.columns = trainer.columns
-            self.tableCollate = trainer.tableCollate
 
         else:
             logging.info('reading trainnig settings from %s' % SETTINGS_FILE)
             if os.path.exists(SETTINGS_FILE):
-                self.getParameters(MODEL_FILE) # Setup CONSTANTS
                 with open(SETTINGS_FILE, 'rb') as sf : 
                     self.deduper = dedupe.StaticDedupe(sf, num_cores = self.cpu)
             else:
-                logging.info('WARNING! could not find file with trainnig settings, please teach system first')
+                logging.warning('WARNING! Could not find file with trainnig settings, please teach system first')
                 sys.exit(0)
 
         self.startBlocking(self.deduper) #, self.step_size)
         clustered_dupes = self.startClustering(self.deduper)
-        logging.info('clustering is finished')
+        logging.info('Clustering is finished')
 
         self.dupesCount = len(clustered_dupes) # set the number of founded duplicates 
         self.saveResults(clustered_dupes)
@@ -201,14 +92,14 @@ class analyzer(object):
         conn.close()
 
     def startBlocking(self, deduper): #, step_size):
-        logging.info('start blocking...')
+        logging.info('Start blocking...')
         """ To run blocking on such a large set of data, we create a separate table
          that contains blocking keys and record ids """
         logging.info('creating blocking_map table in database')
         self.dictCursor.execute("DROP TABLE IF EXISTS blocking_map")
         q = "CREATE TABLE blocking_map (block_key VARCHAR(200), %s INTEGER) " \
                   "CHARACTER SET utf8 COLLATE %s" % (self.tablePK, self.tableCollate)
-        self.dictCursor.execute(q) # self.dictCursor.execute(q)
+        self.dictCursor.execute(q)
 
         """ If dedupe learned a Index Predicate, we have to take a pass
          through the data and create indices. """
@@ -225,7 +116,7 @@ class analyzer(object):
         logging.info('generating blocking map')
         
         self.dictCursor.execute("SELECT %s FROM %s" % (self.columns, self.tableName))
-        self.recordsCount = self.dictCursor.rowcount # c.rowcount
+        self.recordsCount = self.dictCursor.rowcount
 
         full_data = ((row[self.tablePK], row) for row in self.dictCursor)
         b_data = deduper.blocker(full_data)
@@ -327,7 +218,7 @@ class analyzer(object):
         self.dictCursor.execute(q)
         self.con.commit()
         
-        logging.info('blocking is finished')
+        logging.info('Blocking is finished')
 
     def generateGroups(self, result_set) :
         lset = set
@@ -395,68 +286,62 @@ class analyzer(object):
         logging.info('results are saved')
 
     def closeAllConnections(self):
-        self.con.close()
-        self.con2.close()
+        if hasattr(self, 'con'):
+            self.con.close()
 
-    def resetAnalysis(self):
+        if hasattr(self, 'con2'):
+            self.con2.close()
+
+    def resetAnalyzer(self):
         self.dupesCount = 0
         self.recordsCount = 0
         self.isActiveLearning = False
+        self.closeAllConnections()
 
-    def getParameters(self, data_model_file):
+    def getParameters(self, dataModelFile):
         """ Define the Performance parameters and Database source table. """
-        if os.path.exists(data_model_file):
-            logging.info('reading data structure from %s' % data_model_file)
-            with open(data_model_file) as df :
+        if os.path.exists(dataModelFile):
+            logging.info('reading data structure from %s' % dataModelFile)
+            with open(dataModelFile) as df :
                 data = json.load(df)
 
-                self.cpu = data['cores']
-                self.processes = data['threads']
-                self.step_size = data['step_size']
+                params = data['performance']
+                self.cpu = params['cores']
+                self.processes = params['threads']
+                self.step_size = params['step_size']
 
-                params = data['db_params']
+                params = data['source_db']
                 self.tableCollate = params['collate']
                 self.tableName = params['tab_name']
                 self.tablePK = params['tab_id']
                 self.columns = params['tab_columns']
-
+                
+                params = data['training']
+                self.isActiveLearning = params['isActive']
+                return True
         else: 
-            logging.info("WARNING! could not read performance parameters and database source table from %s" % data_model_file)
-            sys.exit(0)
+            logging.warning('WARNING! Could not read performance parameters and database source table from %s' % dataModelFile)
+            return False
 
-def start():
-    analyzer.startAnalyze()
+def start(dataModelFile = MODEL_FILE):
+    global analyzer
+    analyzer = analyzer(dataModelFile)       # initiate analyser
+    analyzer.startAnalyze(analyzer.isActiveLearning)
+    print('Found %s dublicate pairs' % analyzer.dupesCount)
+
+# start with forcing training 
+def startWithTraining(dataModelFile = MODEL_FILE):
+    global analyzer
+
+    logging.info('Running in training mode')
+    analyzer = analyzer(dataModelFile)       # initiate analyser
+    analyzer.startAnalyze(True)
+    print('Found %s dublicate pairs' % analyzer.dupesCount)
 
 def reset():
-    analyzer.resetAnalysis()
+    analyzer.resetAnalyzer()
 
-def initLogging():
-    """
-     Use Python logging to show or suppress verbose output.
-     To enable verbose output, run `python analyzer.py -v`
-    """
-    optp = optparse.OptionParser()
-    optp.add_option('-v', '--verbose', dest='verbose', action='count',
-                    help='Increase verbosity (specify multiple times for more)'
-                    )
-    (opts, args) = optp.parse_args()
-    log_level = logging.WARNING 
-    if opts.verbose :
-        if opts.verbose == 1:
-            log_level = logging.INFO
-        elif opts.verbose >= 2:
-            log_level = logging.DEBUG
-    logging.getLogger().setLevel(log_level)
-
-start_time = time.time()    # set start time
-initLogging()               # start logging
-analyzer = analyzer()       # initiate analyser
-
-# force training 
-analyzer.isActiveLearning = True
-if analyzer.isActiveLearning: trainer = trainer()
-
-start()                     # start analysis
-
-print('ran in', time.time() - start_time, 'seconds')
-print('Found %s dublicate pairs' % analyzer.dupesCount)
+# run by default
+if __name__ == "__main__":
+    start('data_model.json')
+    # startWithTraining('data_model.json')
