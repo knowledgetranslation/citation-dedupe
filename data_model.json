@@ -44,31 +44,27 @@
             "has missing": true
         },
         {
-            "type": "Interaction",
-            "interaction variables" : ["number", "volume"]
-        },
-        {
             "field": "pages",
             "type": "ShortString",
             "variable name": "pages",
             "has missing": true
         },
         {
-            "field": "electronic_resource_number",
-            "type": "String",
+            "field": "accession_number",
+            "type": "Exact",
             "variable name": "issn",
             "has missing": true
         },
         {
             "field": "isbn",
-            "type": "String",
+            "type": "Exact",
             "variable name": "isbn"
         }
     ],
     "source_db": 
         {"tab_id": "id",
-        "tab_name": "refs_training",
-        "tab_columns": "id, author, title, secondary_title, alternate_title, abstract, year, volume, pages, number, isbn, electronic_resource_number",
+        "tab_name": "notfounded",
+        "tab_columns": "id, author, title, secondary_title, alternate_title, abstract, year, volume, pages, number, isbn, accession_number",
         "collate": "utf8_general_ci",
         "row_limit": 0}
     ,
@@ -79,7 +75,8 @@
     ,
     "training": 
         {"isActive" : false,
-        "accuracy" : 0.5,
-        "uncovered" : 5,
-        "samples" : 30}
+        "threshold" : 0.01,
+        "accuracy" : 0.01,
+        "uncovered" : 1,
+        "samples" : 20}
 }
