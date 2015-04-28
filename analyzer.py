@@ -114,8 +114,7 @@ class analyzer(object):
         """ Now we are ready to write our blocking map table by creating a
          generator that yields unique `(block_key, self.tablePK)` tuples. """
         logging.info('generating blocking map')
-        
-        self.dictCursor.execute("SELECT %s FROM %s" % (self.columns, self.tableName))
+        self.dictCursor.execute("SELECT DISTINCT %s FROM %s" % (self.columns, self.tableName)) # DELETE DISTINCT!
         self.recordsCount = self.dictCursor.rowcount
 
         full_data = ((row[self.tablePK], row) for row in self.dictCursor)
@@ -172,10 +171,10 @@ class analyzer(object):
                   " PRIMARY KEY (block_id)) " \
                   "(SELECT block_key FROM " \
                   " (SELECT block_key, " \
-                  "  GROUP_CONCAT(%(tab_id)s ORDER BY %(tab_id)s) AS block " \
+                  "  GROUP_CONCAT(%(id)s ORDER BY %(id)s) AS block " \
                   "  FROM blocking_map " \
                   "  GROUP BY block_key HAVING COUNT(*) > 1) AS blocks " \
-                  " GROUP BY block)" % {'tab_id': self.tablePK}
+                  " GROUP BY block)" % {'id': self.tablePK}
         self.dictCursor.execute(q)
 
         logging.info('creating block_key index')
@@ -215,6 +214,7 @@ class analyzer(object):
         q = "CREATE TABLE smaller_coverage (SELECT %(id)s, block_id, " \
                   " TRIM(',' FROM SUBSTRING_INDEX(sorted_ids, block_id, 1)) AS smaller_ids " \
                   " FROM plural_block INNER JOIN covered_blocks USING (%(id)s))" % {'id': self.tablePK}
+                  # " IF(SUBSTRING_INDEX(sorted_ids, block_id, 1) > 0, TRIM(',' FROM SUBSTRING_INDEX(sorted_ids, block_id, 1)) , block_id) AS smaller_ids " \
         self.dictCursor.execute(q)
         self.con.commit()
         
@@ -236,12 +236,12 @@ class analyzer(object):
                 i += 1
 
                 if i % 1000 == 0 :
-                    print(i, "blocks")
-                    print(time.time() - start_time, "seconds")
+                    logging.info('%s, blocks' % i)
+                    # print(time.time() - start_time, "seconds")
 
             smaller_ids = row['smaller_ids']
 
-            if smaller_ids :
+            if smaller_ids: # and ',' in smaller_ids : # DELETE THIS
                 smaller_ids = lset(smaller_ids.split(','))
             else :
                 smaller_ids = lset([])
@@ -258,7 +258,7 @@ class analyzer(object):
         self.dictCursor.execute(q)
         logging.info('start clustering...')
 
-        return deduper.matchBlocks(self.generateGroups(self.dictCursor), threshold=0.5)
+        return deduper.matchBlocks(self.generateGroups(self.dictCursor), threshold=self.threshold) #0.5)
 
     def saveResults(self, clustered_dupes):
         """
@@ -266,21 +266,21 @@ class analyzer(object):
         all refer to the same entity. We write this out onto an entity map
         table
         """
-        self.dictCursor.execute("DROP TABLE IF EXISTS entity_map")
+        self.dictCursor.execute("DROP TABLE IF EXISTS %s_entity_map" % self.tableName)
 
-        logging.info('creating entity_map database')
-        q = "CREATE TABLE entity_map (%(id)s INTEGER, canon_id INTEGER, " \
-                  " cluster_score FLOAT, PRIMARY KEY(%(id)s))" % {'id': self.tablePK}
+        logging.info('creating %s_entity_map database' % self.tableName)
+        q = "CREATE TABLE %(tName)s_entity_map (%(id)s INTEGER, canon_id INTEGER, " \
+                  " cluster_score FLOAT, PRIMARY KEY(%(id)s))" % {'tName' : self.tableName, 'id': self.tablePK}
         self.dictCursor.execute(q)
 
         for cluster, scores in clustered_dupes :
             cluster_id = cluster[0]
             for id, score in zip(cluster, scores) :
-                self.dictCursor.execute('INSERT INTO entity_map VALUES (%s, %s, %s)' % (id, cluster_id, score))
+                self.dictCursor.execute('INSERT INTO %s_entity_map VALUES (%s, %s, %s)' % (self.tableName, id, cluster_id, score))
 
         self.con.commit()
 
-        self.dictCursor.execute("CREATE INDEX head_index ON entity_map (canon_id)")
+        self.dictCursor.execute("CREATE INDEX head_index ON %s_entity_map (canon_id)" % self.tableName)
         self.con.commit()
         
         logging.info('results are saved')
@@ -318,6 +318,7 @@ class analyzer(object):
                 
                 params = data['training']
                 self.isActiveLearning = params['isActive']
+                self.threshold = params['threshold']        # Lowering the number will increase recall, raising it will increase precision
                 return True
         else: 
             logging.warning('WARNING! Could not read performance parameters and database source table from %s' % dataModelFile)
