@@ -7,25 +7,30 @@ import mysql.connector
 import json
 import dedupe
 
-PATH = os.path.abspath('.') +'/'
-MODEL_FILE = PATH + 'data_model.json'
+PATH = os.path.dirname(__file__)
+SETTINGS_FILE = PATH +'/'+ 'dedupe_settings'
+TRAINING_FILE = PATH +'/'+ 'dedupe_training.json'
 
-MYSQL_CONFIG = PATH + 'db.cnf'
-SETTINGS_FILE = PATH + 'dedupe_settings'
-TRAINING_FILE = PATH + 'dedupe_training.json'
+ROOTPATH, _ = os.path.split(PATH)
+MODEL_FILE = ROOTPATH +'/'+ 'data_model.json'
+MYSQL_CONFIG = ROOTPATH +'/'+ 'db.cnf'
 
 class trainer(object):
-    def __init__(self, modelFile = MODEL_FILE):
+    def __init__(self, modelFile = MODEL_FILE, tableName =''):
+        self.tableName = tableName
+        
         if not self.getDataModel(modelFile):
             logging.warning('WARNING! Please, choose other Data Model file against %s' % modelFile)
             self.resetTraining()
-            sys.exit(0)
-
+            # sys.exit(0)
+            quit
+            return None
+            
         self.recordsCount = 0
         self.connection = mysql.connector.connect(option_files = MYSQL_CONFIG)
         self.cursor = self.connection.cursor(dictionary = True, buffered = False)
         self.cursor.execute("SET net_write_timeout = 3600")
-
+        
     def startTraining(self):
         logging.info('start training...')
         # Create a new deduper object and pass our data model to it.
@@ -48,41 +53,51 @@ class trainer(object):
                 deduper.readTraining(tf)
 
         self.startActiveLearning(deduper) # Start training loop
+        """
+        'ppc' (0.1) - Limits the Proportion of Pairs Covered that we allow a predicate to cover. 
+        If a predicate puts together a fraction of possible pairs greater than the ppc, 
+        that predicate will be removed from consideration. As the size of the data increases, 
+        the user will generally want to reduce ppc.
+        'ppc' should be a value between 0.0 and 1.0.
 
-        """ Notice our two arguments here
-         `ppc` limits the Proportion of Pairs Covered that we allow a
-         predicate to cover. If a predicate puts together a fraction of
-         possible pairs greater than the ppc, that predicate will be removed
-         from consideration. As the size of the data increases, the user
-         will generally want to reduce ppc (=0.01).
+        'uncovered_dupes' (1) – The number of true dupes pairs in our training data that we can 
+        accept will not be put into any block. If true duplicates are never in the same block, 
+        we will never compare them, and may never declare them to be duplicates.
 
-         `uncovered_dupes`(=5) is the number of true dupes pairs in our training
-         data that we are willing to accept will never be put into any
-         block. If true duplicates are never in the same block, we will never
-         compare them, and may never declare them to be duplicates.
+        However, requiring that we cover every single true dupe pair may mean that we have to use 
+        blocks that put together many, many distinct pairs that we’ll have to expensively, compare as well.
 
-         However, requiring that we cover every single true dupe pair may
-         mean that we have to use blocks that put together many, many
-         distinct pairs that we'll have to expensively, compare as well. """
+        index_predicates (True) – Should dedupe consider predicates that rely upon indexing the data. 
+        Index predicates can be slower and take susbstantial memory.
+        """
         logging.info('saving training data to %s' % TRAINING_FILE)
-        deduper.train(ppc = self.accuracy)
-        # deduper.train(ppc = self.accuracy, uncovered_dupes = self.uncovered)
 
-        # When finished, save our labelled, training pairs to disk
-        self.saveSettingFiles(deduper)
+        try:
+            deduper.train()
+        except Exception as e:
+            err = ValueError
+            logging.info(ValueError)
+            self.closeAllConnections()
+            return None
+        else:
+            # deduper.train(ppc = self.accuracy)
+            # deduper.train(ppc = self.accuracy, uncovered_dupes = self.uncovered)
 
-        # We can now remove some of the memory hobbing objects we used for training
-        logging.info('Cleaning unused data')
-        deduper.cleanupTraining()
+            # When finished, save our labelled, training pairs to disk
+            self.saveSettingFiles(deduper)
+            
+            # We can now remove some of the memory hobbing objects we used for training
+            logging.info('Cleaning unused data')
+            deduper.cleanupTraining()
 
-        logging.info('Training was finished')
-        self.closeAllConnections()
-        return deduper
+            logging.info('Training was finished')
+            self.closeAllConnections()
+            return deduper
 
     def startActiveLearning(self, deduper):
         logging.info('Starting active labelling,  use "y", "n" and "u" keys to flag duplicates press "f" when you are finished')
         """ Starts the training loop. Dedupe will find the next pair of records
-         it is least certain about and ask you to label them as duplicates or not. """
+        it is least certain about and ask you to label them as duplicates or not. """
         dedupe.convenience.consoleLabel(deduper)
         
     def saveSettingFiles(self, deduper):
@@ -95,9 +110,8 @@ class trainer(object):
             deduper.writeSettings(sf)
 
     def getDataModel(self, dataModelFile):
-        """ Define the fields which dedupe will pay attention to
-         The Pages, Volume, Number, ISBN and ISSN and fields are often missing,
-         tell dedupe that. """
+        """ Define the fields from source DB which Dedupe will pay attention to.
+        Limit parameters for improving Performance. And training parameters."""
         if os.path.exists(dataModelFile):
             logging.info('reading data structure from %s' % dataModelFile)
             with open(dataModelFile) as df :
@@ -109,6 +123,7 @@ class trainer(object):
                 self.processes = params['threads']
                 self.step_size = params['step_size']
                 
+                
                 params = data['training']
                 self.samples_size = params['samples']
                 self.accuracy = params['accuracy']
@@ -116,9 +131,12 @@ class trainer(object):
 
                 params = data['source_db']
                 self.tableCollate = params['collate']
-                self.tableName = params['tab_name']
                 self.tablePK = params['tab_id']
                 self.columns = params['tab_columns']
+                # self.tableName = params['tab_name']
+                
+                if self.tableName == '':            # added for web API v1
+                    self.tableName = params['tab_name']
                 return True
         else: 
             logging.warning('WARNING! Could not read data structure from %s' % dataModelFile)

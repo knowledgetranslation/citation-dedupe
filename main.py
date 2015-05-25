@@ -10,7 +10,8 @@ import analyzer
 # from addons 
 # import addons.trainer
 
-PATH = os.path.abspath('.') +'/'
+# PATH = os.path.abspath('.') +'/'
+PATH = os.path.dirname(__file__) +'/'
 MODEL_FILE = PATH + 'data_model.json'
 
 # MYSQL_CONFIG = PATH + 'db.cnf'
@@ -61,7 +62,7 @@ def main():
         # start analysis
         analyzer.start()                    # by Default argument = MODEL_FILE
 
-    print 'Task completed successful! Ran in', round(time.time() - start_time, 1), 'seconds'
+    print('Task completed successful! Ran in', round(time.time() - start_time, 1), 'seconds')
 
 if __name__=='__main__':
     main()

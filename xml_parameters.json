@@ -1,0 +1,75 @@
+{
+    "1_comment" : "Link table Columns to XML Tags of elements. If column not paired than tagName = columnName by default",
+    "map_column_to_xml" : {
+         "rec-number"      : "id",
+         "ref-type"        : "reference_type",
+         "auth-address"    : "author_address",
+         "secondary-title" : "secondary_title", 
+         "alt-title"       : "alternate_title",
+         "keyword"         : "keywords",
+         "accession-num"   : "accession_number",
+         "remote-database-name" : "name_of_database",
+         "remote-database-provider" : "database_provider"
+        },
+    "2_comment" : "Define Group's hierarchy. Pair contains Element(Data or Subgroup) and his Group",
+    "grouped_elements"  : {
+         "key"             : "foreign-keys",
+         "authors"         : "contributors",
+         "author"          : "authors",
+         "keyword"         : "keywords",
+         "title"           : "titles",
+         "secondary-title" : "titles", 
+         "alt-title"       : "titles",
+         "full-title"      : "periodical",
+         "abbr-1"          : "periodical",
+         "year"            : "dates",
+         "pub-dates"       : "dates",
+         "date"            : "pub-dates",
+         "related-urls"    : "urls",
+         "url"             : "related-urls"
+        },
+    "3_comment" : "Contains list of element's Tags which should store in one column joined together and separated by LINE_SEPARATOR.",
+    "list_elements"    : ["author", "keyword", "url"],
+    "4_comment" : "Contains all columns which should be INTEGER type. In other case by default column type is MEDIUMTEXT",
+    "integer_columns"  : ["id"],
+    "5_comment" : "Contains all elements with data('full-title', 'abbr-1')",
+    "data_elements"    : ["rec-number", "ref-type", "author", "auth-address", "title", "secondary-title", "alt-title", "pages",
+                          "keyword", "year", "date", "isbn", "accession-num", "abstract", "notes", "url", "remote-database-name", 
+                          "volume", "number", "remote-database-provider", "language" ],
+    "6_comment" : "Describe source Database: primary key - tab_pk, table name - tab_name, list of columns for destination table - tab_columns, limit for row's output.",
+    "source_db"        : {
+        "tab_PK"           : "id",
+        "tab_name"         : "training_data",
+        "tab_columns"      : [
+            "id", "reference_type", "text_styles", "author", "year", "title", "pages", "secondary_title", "volume", "number", "number_of_volumes",
+            "secondary_author", "place_published", "publisher", "subsidiary_author", "edition", "keywords", " type_of_work", "date", "abstract",
+            "label", "url", "tertiary_title", "tertiary_author", "notes", "isbn", "custom_1", "custom_2", "custom_3", "custom_4", "alternate_title",
+            "accession_number", "call_number", "short_title", "custom_5", "custom_6", "section", "original_publication", "reprint_edition", "reviewed_item",
+            "author_address", "image", "caption", "custom_7", "electronic_resource_number", "link_to_pdf", "translated_author", "translated_title",
+            "name_of_database", "database_provider", "research_notes", "language", "access_date", "last_modified_date", "xml"
+        ],
+        "original_xml_column" : "xml",
+        "collate"         : "utf8_general_ci",
+        "row_limit"       : 9999999
+        },
+    "parser" : {
+        "save_original_xml"    : true
+        },
+    "export" : {
+        "pretty_print"    : false,
+        "styled_elements" : [
+            "author", "auth-address", "title", "secondary-title", "alt-title", "full-title", "abbr-1", "pages", "volume", "number", "keyword", "year", "date", "isbn", "accession-num", "abstract", "notes", "url", "remote-database-name", "remote-database-provider", "language"
+        ]
+        },
+    "line_separator" : "\r",
+    "tags" : {
+        "style" : {
+            "face" : "normal",
+            "font" : "default", 
+            "size" : "100%"},
+        "source-app" : {
+            "name" : "EndNote",
+            "version" :"17.2"}
+    }
+    
+}

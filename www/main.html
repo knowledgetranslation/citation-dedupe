@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Dedupe service for EndNote</title>
+        <link rel="icon" type="image/png" href="http://cdn.rawgit.com/strashylin/HTML_REPO/master/favicon.ico" />
+        <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+        <script>function msgStartAnalysis() {
+                        $('#result').empty().append('Data Analysis Process started.');
+                    };
+                function hideControls(controlName) {
+                        //alert(controlName);
+                        $(controlName).each(function (e) {
+                            if (e != 0) $(this).hide();             
+                        });
+                    };
+                function msgFinishAnalysis(resp) {
+                        $('#inputForm').hide();
+                        if (resp['state'] == 200) {
+                            $('#result').empty().append('Data Analysis Process Successfully complete.<br>');
+                        }
+                        else
+                            $('#result').empty().append(resp['message']);
+                    };
+                function createRequestObject() {
+                    if (typeof XMLHttpRequest === 'undefined') {
+                        XMLHttpRequest = function() {
+                          try { return new ActiveXObject("Msxml2.XMLHTTP.6.0"); }
+                            catch(e) {}
+                          try { return new ActiveXObject("Msxml2.XMLHTTP.3.0"); }
+                            catch(e) {}
+                          try { return new ActiveXObject("Msxml2.XMLHTTP"); }
+                            catch(e) {}
+                          try { return new ActiveXObject("Microsoft.XMLHTTP"); }
+                            catch(e) {}
+                          throw new Error("This browser does not support XMLHttpRequest.");
+                        };
+                      }
+                      return new XMLHttpRequest();
+                    }
+                function uploadFile() {
+                        // Start Message
+                        msgStartAnalysis();
+                        // Data as FormData object
+                        var data = new FormData();
+                        data.append('file', $('#upload')[0].files[0]);
+                        var url='',
+                            stateCount = 0;
+                           var xmlhttp = createRequestObject();
+                        //if () var xmlhttp = new XMLHttpRequest();
+                        //else var xmlhttp = new ActiveXObject("Microsoft.XMLHTTP");
+                            
+                        // Check Server State before get response
+                        xmlhttp.onreadystatechange = function() {
+                            if (xmlhttp.readyState == 4 && xmlhttp.responseText!=''){// && xmlhttp.status == 200) {
+                                if (xmlhttp.responseText!='') {
+                                    var jsonResponse = JSON.parse(xmlhttp.responseText);
+                                    msgFinishAnalysis(jsonResponse);
+                                }
+                                else $('#result').empty().append("Error! Couldn't get response from Server");
+                                //alert(xmlhttp.responseText);
+                            }
+                            else {
+                                //alert(xmlhttp.readyState);
+                                if (stateCount == 0) {
+                                    $('#result').empty().append('Data Analysis in progress');
+                                    stateCount = 1;
+                                }
+                                else $('#result').append('.');
+                            }
+                        };
+                        //Send Data to Server
+                        //alert($("input[type='checkbox']").val());
+                        if ($("input[type='checkbox']").is(':checked')) 
+                             url = '/v1/training'; 
+                        else url = '/v1/upload';
+                        
+                        //alert(url);
+                        xmlhttp.open('POST', url, false); // true);
+                       // xmlhttp.timeout = 1000;
+                        //xmlhttp.setRequestHeader("Content-type","multipart/form-data");
+                        xmlhttp.send(data);
+                    };
+        </script>
+    </head>
+    <body>
+        <div id="inputForm" width= 20%>
+            <input type="checkbox" name="activeLearning" value="1">Run in Active Learning mode<br>
+            <input id="upload" type="file" name="file" onchange="uploadFile()" accept=".xml, .json, .csv" placeholder="Select File...">
+        </div>
+        <div id="result"></div>
+    </body>
+</html>

@@ -24,12 +24,14 @@
         {
             "field": "abstract",
             "type": "Text",
-            "variable name": "abstract"
+            "variable name": "abstract",
+            "has missing": true
         },
         {
             "field": "year",
             "type": "Exact",
-            "variable name": "year"
+            "variable name": "year",
+            "has missing": true
         },
         {
             "field": "number",
@@ -63,20 +65,20 @@
     ],
     "source_db": 
         {"tab_id": "id",
-        "tab_name": "notfounded",
+        "tab_name": "training_data",
         "tab_columns": "id, author, title, secondary_title, alternate_title, abstract, year, volume, pages, number, isbn, accession_number",
         "collate": "utf8_general_ci",
         "row_limit": 0}
     ,
     "performance": 
         {"cores" : 1,
-        "threads" : 1,
+        "threads" : 2,
         "step_size" : 3000}
     ,
     "training": 
         {"isActive" : false,
-        "threshold" : 0.01,
+        "threshold" : 0.5,
         "accuracy" : 0.01,
         "uncovered" : 1,
-        "samples" : 20}
+        "samples" : 30}
 }

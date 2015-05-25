@@ -7,37 +7,38 @@
 
  __Note:__ To create related tables in Database you need to run `/init_db.py` 
  before running this script. """
- 
-# from __future__ import print_function
 
 import os, sys
 import itertools
 import logging
-# import locale
-# import pickle
-# import multiprocessing
-
 import mysql.connector
 import dedupe
 import json
 
-from addons import trainer
-
+# sys.path.insert(0, './dedupes') 
+sys.path.insert(1, os.path.dirname(__file__)) #'./dedupes')        # Add dedupes into system path
+ 
+ 
 # FILES VARS
-PATH = os.path.abspath('.') +'/'
+# PATH = os.path.abspath('.') +'/'
+PATH = os.path.dirname(__file__) +'/'
 MODEL_FILE = PATH + 'data_model.json'
 
 MYSQL_CONFIG = PATH + 'db.cnf'
-SETTINGS_FILE = PATH + 'dedupe_settings'
-TRAINING_FILE = PATH + 'dedupe_training.json'
+SETTINGS_FILE = PATH + 'addons/dedupe_settings'
+TRAINING_FILE = PATH + 'addons/dedupe_training.json'
 
 class analyzer(object):
-    def __init__(self, modelFile = MODEL_FILE):
+    def __init__(self, modelFile = MODEL_FILE, tabName=''):
+        self.tableName = tabName
         if not self.getParameters(modelFile):
             logging.warning('WARNING! Please, choose other Data Model file against %s' % modelFile)
             self.resetAnalyzer()
-            sys.exit(0)
-
+            # sys.exit(0)
+            # os._exit(0)
+            quit
+            return None
+            
         self.dupesCount = 0
         self.recordsCount = 0
         self.modelFile = modelFile
@@ -55,27 +56,47 @@ class analyzer(object):
     def startAnalyze(self, forceTraining = False):
         # if self.isActiveLearning:
         if forceTraining:
+            from addons import trainer
             global trainer
-
-            trainer = trainer.trainer(MODEL_FILE) #self.modelFile)
-            self.deduper = trainer.startTraining()
-
+            
+            traine = trainer.trainer(MODEL_FILE, self.tableName)
+            self.deduper = traine.startTraining()
         else:
             logging.info('reading trainnig settings from %s' % SETTINGS_FILE)
+            # print('@@@', SETTINGS_FILE)
             if os.path.exists(SETTINGS_FILE):
                 with open(SETTINGS_FILE, 'rb') as sf : 
                     self.deduper = dedupe.StaticDedupe(sf, num_cores = self.cpu)
             else:
-                logging.warning('WARNING! Could not find file with trainnig settings, please teach system first')
-                sys.exit(0)
+                err = 'WARNING! Could not find file with trainnig settings, please teach system first'
+                logging.warning(err)
+                self.closeAllConnections
+                # sys.exit(0)
+                # os._exit(0)
+                # exit
+                # quit
+                return False, err
 
-        self.startBlocking(self.deduper) #, self.step_size)
-        clustered_dupes = self.startClustering(self.deduper)
-        logging.info('Clustering is finished')
-
-        self.dupesCount = len(clustered_dupes) # set the number of founded duplicates 
-        self.saveResults(clustered_dupes)
+        if self.deduper is not None:
+            self.startBlocking(self.deduper) #, self.step_size)
+            clustered_dupes = self.startClustering(self.deduper)
+            if clustered_dupes is None:
+                err = 'Clustering was failed.'
+                logging.warning(err)
+                self.closeAllConnections
+                return False, err
+                
+            logging.info('Clustering is finished')
+            self.dupesCount = len(clustered_dupes) # set the number of founded duplicates 
+            self.saveResults(clustered_dupes)
+        else:
+            err = 'Training was failed.'
+            logging.warning(err)
+            self.closeAllConnections
+            return False, err
+            
         self.closeAllConnections
+        return True, 'OK' #None
 
     def connectDB(self, dbOptionsFile):
         """ You need to fill option file `db.cnf` with your mysql database information """
@@ -257,7 +278,7 @@ class analyzer(object):
                   "USING (%s) ORDER BY (block_id)" % (self.columns, self.tableName, self.tablePK)
         self.dictCursor.execute(q)
         logging.info('start clustering...')
-
+        # print(self.threshold)
         return deduper.matchBlocks(self.generateGroups(self.dictCursor), threshold=self.threshold) #0.5)
 
     def saveResults(self, clustered_dupes):
@@ -312,7 +333,10 @@ class analyzer(object):
 
                 params = data['source_db']
                 self.tableCollate = params['collate']
-                self.tableName = params['tab_name']
+                
+                if self.tableName == '':            # added for web API v1
+                    self.tableName = params['tab_name']
+                
                 self.tablePK = params['tab_id']
                 self.columns = params['tab_columns']
                 
@@ -324,18 +348,17 @@ class analyzer(object):
             logging.warning('WARNING! Could not read performance parameters and database source table from %s' % dataModelFile)
             return False
 
-def start(dataModelFile = MODEL_FILE):
+def start(dataModelFile = MODEL_FILE, tableName = ''):
     global analyzer
-    analyzer = analyzer(dataModelFile)       # initiate analyser
+    analyzer = analyzer(dataModelFile, tableName)       # initiate analyser with Tale Name
     analyzer.startAnalyze(analyzer.isActiveLearning)
     print('Found %s dublicate pairs' % analyzer.dupesCount)
 
 # start with forcing training 
-def startWithTraining(dataModelFile = MODEL_FILE):
+def startWithTraining(dataModelFile = MODEL_FILE, tableName = ''):
     global analyzer
-
     logging.info('Running in training mode')
-    analyzer = analyzer(dataModelFile)       # initiate analyser
+    analyzer = analyzer(dataModelFile, tableName)       # initiate analyser
     analyzer.startAnalyze(True)
     print('Found %s dublicate pairs' % analyzer.dupesCount)
 
