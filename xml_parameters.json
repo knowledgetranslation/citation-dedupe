@@ -35,7 +35,7 @@
     "5_comment" : "Contains all elements with data('full-title', 'abbr-1')",
     "data_elements"    : ["rec-number", "ref-type", "author", "auth-address", "title", "secondary-title", "alt-title", "pages",
                           "keyword", "year", "date", "isbn", "accession-num", "abstract", "notes", "url", "remote-database-name", 
-                          "volume", "number", "remote-database-provider", "language" ],
+                          "volume", "number", "remote-database-provider", "language"],
     "6_comment" : "Describe source Database: primary key - tab_pk, table name - tab_name, list of columns for destination table - tab_columns, limit for row's output.",
     "source_db"        : {
         "tab_PK"           : "id",

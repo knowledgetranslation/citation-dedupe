@@ -8,23 +8,47 @@ import datetime, time
 PATH = os.path.dirname(__file__)
 sys.path.insert(1, PATH) 
 # sys.path.insert(1, './') 
-err = {'code':'', 'text':'', 'details':''}
+err = {'code': '', 'text': '', 'details': ''}
 error = err
 
+@route('/ver')
+@route('/version')
+@route('/ver<ver:int>')
+def version(ver=1):
+    # response.content_type = 'text/html' #'text/plain'
+    assert int(ver) >= 0, 'Negative value "version"'
+
+    if ver in [0, 1]:
+        response.status = 200
+        response.set_cookie(name='APIver', value=str(ver), path='/',  max_age=100500)  #expires=int(time.time()) + 3600)
+        # print(request.get_cookie('APIver', '0'))
+        msg = {"status" : 200,  # response.status,
+               "message": "Deduper service API version: %s" % ver,
+               "details": getUrl(request),  #request.environ['PATH_INFO'],
+               "data"   : ver
+              }
+        return json.dumps(msg)
+    else:
+        err['code'] = 5001 
+        err['text'] = 'Wrong Deduper service API version: %s' % ver
+        err['details'] = getUrl(request)
+
+        return errorInternalServer(err)
+        
 @route('/')
 @route('/main')
-@route('/<page>')
-def main(page = 'main.html'):
-    pageFile = PATH + 'www/'+ page
+@route('/<page>') #:re:(\s)>') # \d+(%s\d)*
+def main(page='main.html'):
+    pageFile = PATH + 'www/' + page
     
     if os.path.exists(pageFile):
         with open(pageFile) as df :
-            HTML = df.read()
+            html = df.read()
             
-            response.content_type = 'text/html' # text/xml
+            response.content_type = 'text/html'  # text/xml
             response.status = 200
 
-            return HTML
+            return html
 
     err['code'] = 5009
     err['text'] = 'Couldn\'t find file: "%s"' % page
@@ -32,36 +56,12 @@ def main(page = 'main.html'):
 
     return errorInternalServer(err)
 
-@route('/ver')
-@route('/version')
-@route('/ver<version>')
-def version(version = '1'):
-    # response.content_type = 'text/html' #'text/plain'
-    assert int(version) >= 0, 'Negotive value "version"'
-
-    if version in ['0', '1']:
-        response.status = 200
-        response.set_cookie(name='APIver', value=version, path='/',  max_age=100500)#, expires=(int(time.time()) + 3600))
-        # print(request.get_cookie('APIver', '0'))
-        msg = {"status"  : 200, # response.status,
-               "message" : "Deduper service API version: %s" % version,
-               "details" : getUrl(request), #request.environ['PATH_INFO'],
-               "data"    : version
-              }
-        return json.dumps(msg)
-    else:
-        err['code'] = 5001 
-        err['text'] = 'Wrong Deduper service API version: %s' % version
-        err['details'] = getUrl(request)
-
-        return errorInternalServer(err)
-
-@post('/v1/upload') #, method='POST')
+@post('/v1/upload')  #, method='POST')
 def control():
     isUploaded, result = uploadFile()       # upload file return filePath or Error
     msg = {}
     
-    if isUploaded: #if fileName !='' and fileName is not None:
+    if isUploaded:  #if fileName !='' and fileName is not None:
         filePath = result
         fileName, fileExt = os.path.splitext(os.path.basename(filePath))
         
@@ -88,7 +88,19 @@ def control():
         msg = json.loads(parse(filePath, tableName)) # "Parse error: file wasn't validated."
         if msg['status'] != 200:
             return msg
-            
+        
+        if uploadedRecCount == 1:
+            response.content_type = 'application/json'
+            response.status = 200        
+            msg = {"status"  : 200,
+                   "code"    : 2001,
+                   "message" : "Data file contains only one record. Analysis wasn't finished.", 
+                   "details" : getUrl(request),
+                   "data"    : 1,
+                   "dupes"   : 0
+                  }            
+            return json.dumps(msg)
+        
         # run analysis
         msg = json.loads(runAnalysis(tableName))
         if msg['status'] != 200:
@@ -180,7 +192,7 @@ def parse(filePath, tableName=''):
         fileName = request.get_cookie('file_name') or os.path.splitext(os.path.basename(filePath))[0] # Get fileName from cookie or filePath #, secret='some-secret-key')
 
         if fileName !='' and fileName is not None:
-            tableName = '%s_%s' % (cleanStringVar(fileName), cleanStringVar(fstr(datetime.date.today()))) #.replace('-', ''))
+            tableName = '%s_%s' % (cleanStringVar(fileName), cleanStringVar(str(datetime.date.today()))) #.replace('-', ''))
         else:
             err['code'] = 5005
             err['text'] = 'Undefined Table name.' # File extension not allowed.
@@ -195,6 +207,7 @@ def parse(filePath, tableName=''):
     if parse is not None:
         isParsed = parse.startParse()
         if isParsed:
+            global uploadedRecCount
             uploadedRecCount = parse.recCount
             # msg = '%s records were uploaded' % uploadedRecCount
 
@@ -207,7 +220,7 @@ def parse(filePath, tableName=''):
                                "details" : getUrl(request)
                               })
     err['code'] = 5006
-    err['text'] = 'File "%s" into table "%s" parsing was failed.' % (filePath, tableName)
+    err['text'] = "File '%s' into table, parsing was failed." % (filePath) #, tableName)
     err['details'] = getUrl(request)
     return errorInternalServer(err)
 
@@ -217,7 +230,7 @@ def runAnalysis(tableName='', isActiveLearning = False):
     if tableName == '':
         fileName = request.get_cookie('file_name') #, secret='some-secret-key')
         if fileName !='' and fileName is not None:
-            tableName = '%s_%s' % (cleanStringVar(fileName), cleanStringVar(fstr(datetime.date.today()))) #.replace('-', ''))
+            tableName = '%s_%s' % (cleanStringVar(fileName), cleanStringVar(str(datetime.date.today()))) #.replace('-', ''))
         else:
             err['code'] = 5005
             err['text'] = 'Undefined Table name.' # File extension not allowed.
@@ -251,7 +264,8 @@ def runAnalysis(tableName='', isActiveLearning = False):
 
 @route('/v1/export')
 @route('/v1/export/<tableName>')
-def exporData(tableName=''):    
+@route('/v1/export/<tableName>/<savefile>')
+def exporData(tableName='', savefile = False):
     if tableName == '':
         fileName = request.get_cookie('file_name') #, secret='some-secret-key')
         if fileName !='' and fileName is not None and fileName is not None:
@@ -262,15 +276,18 @@ def exporData(tableName=''):
             err['text'] = 'Undefined Table name.' # File extension not allowed.
             err['details'] = getUrl(request)
             return errorInternalServer(err)
-
+        
     # from dedupes 
     import export as export
     global export
-
-    exporter = export.export(tabName = tableName)
-    
-    all_data = exporter.jsonExport()
+    outFile = 'tmp/%s.xml' % tableName
+    exporter = export.export(tabName = tableName, outFile = outFile)
+    exporter.constraint = ' WHERE %(id)s NOT IN (SELECT %(id)s FROM %(tabName)s_entity_map)' % {'id': exporter.tablePK, 'tabName': exporter.tableName}
+    all_data = exporter.xmlOriginalExport() #exporter.jsonExport()
     dupes = exporter.jsonDupesExport()
+    
+    if savefile:
+        exporter.exportIntoXmlFile()
     
     if all_data is not None:
         response.content_type = 'application/json'
@@ -379,10 +396,19 @@ def getUrl(request):
 def cleanStringVar(var):
     return str(var).replace(' ', '').replace('(', '_').replace(')', '').replace('[', '_').replace(']', '').replace('.', '_').replace('-', '_').replace('_', '')
 
-def start():
-    host='127.0.0.1' #'45.55.160.201'
-    port=8081 #88
-    srv = run(debug=False, reloader=True, host=host, port=port)
+def start(isTest=False):
+    import socket
+    timeout = 360000    # Set TimeOut = 5 minutes for very Large files
+    
+    if isTest:
+        host='45.55.160.201'
+        port=8088
+    else:
+        host='127.0.0.1'
+        port=8081
+    
+    socket.setdefaulttimeout(timeout)
+    srv = run(debug=True, reloader=True, host=host, port=port)
 
 if __name__ == "__main__":
     start()

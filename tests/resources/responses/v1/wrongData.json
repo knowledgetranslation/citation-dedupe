@@ -1,0 +1,1 @@
+{"message": "File '/root/dedupe_python/project/dedupes/uploaded/wrongData.xml' into table, parsing was failed.", "code": 5006, "details": "http://0.0.0.0:8081/v1/upload", "status": 500}

@@ -16,6 +16,7 @@ MODEL_FILE = ROOTPATH +'/'+ 'data_model.json'
 MYSQL_CONFIG = ROOTPATH +'/'+ 'db.cnf'
 
 class trainer(object):
+    # noinspection PyPep8Naming,PyPep8Naming
     def __init__(self, modelFile = MODEL_FILE, tableName =''):
         self.tableName = tableName
         
@@ -24,13 +25,14 @@ class trainer(object):
             self.resetTraining()
             # sys.exit(0)
             quit
-            return None
+            # return None
             
         self.recordsCount = 0
         self.connection = mysql.connector.connect(option_files = MYSQL_CONFIG)
         self.cursor = self.connection.cursor(dictionary = True, buffered = False)
         self.cursor.execute("SET net_write_timeout = 3600")
-        
+
+    # noinspection PyPep8Naming
     def startTraining(self):
         logging.info('start training...')
         # Create a new deduper object and pass our data model to it.
@@ -74,8 +76,7 @@ class trainer(object):
 
         try:
             deduper.train()
-        except Exception as e:
-            err = ValueError
+        except Exception:
             logging.info(ValueError)
             self.closeAllConnections()
             return None
@@ -94,13 +95,17 @@ class trainer(object):
             self.closeAllConnections()
             return deduper
 
-    def startActiveLearning(self, deduper):
+    # noinspection PyPep8Naming
+    @staticmethod
+    def startActiveLearning(deduper):
         logging.info('Starting active labelling,  use "y", "n" and "u" keys to flag duplicates press "f" when you are finished')
         """ Starts the training loop. Dedupe will find the next pair of records
         it is least certain about and ask you to label them as duplicates or not. """
         dedupe.convenience.consoleLabel(deduper)
-        
-    def saveSettingFiles(self, deduper):
+
+    # noinspection PyPep8Naming
+    @staticmethod
+    def saveSettingFiles(deduper):
         logging.info('Saving training data to %s' % TRAINING_FILE)
         with open(TRAINING_FILE, 'w') as tf:
             deduper.writeTraining(tf)
@@ -109,6 +114,7 @@ class trainer(object):
         with open(SETTINGS_FILE, 'wb') as sf:
             deduper.writeSettings(sf)
 
+    # noinspection PyPep8Naming,PyPep8Naming
     def getDataModel(self, dataModelFile):
         """ Define the fields from source DB which Dedupe will pay attention to.
         Limit parameters for improving Performance. And training parameters."""
@@ -142,14 +148,18 @@ class trainer(object):
             logging.warning('WARNING! Could not read data structure from %s' % dataModelFile)
             return False
 
+    # noinspection PyPep8Naming
     def closeAllConnections(self):
         if hasattr(self, 'connection'):
             self.connection.close()
 
+    # noinspection PyPep8Naming
     def resetTraining(self):
         self.recordsCount = 0
         self.closeAllConnections()
 
+
+# noinspection PyPep8Naming
 def start(dataModelFile = MODEL_FILE):
     global trainer
     trainer = trainer(dataModelFile)
